@@ -3,37 +3,38 @@
 import type React from "react"
 
 import { useState } from "react"
+import { useAuth } from "@/context/AuthContext"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ArrowLeft, Eye, EyeOff } from "lucide-react"
 
 interface AuthFormProps {
-  onLogin: (user: any) => void
+  onLogin: () => void
   onBack?: () => void
 }
 
 export function AuthForm({ onLogin, onBack }: AuthFormProps) {
   const [isLogin, setIsLogin] = useState(true)
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
+  const [email, setEmail] = useState("testuser2@example.com")
+  const [password, setPassword] = useState("password123")
   const [name, setName] = useState("")
   const [showPassword, setShowPassword] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
+                  
+  const { login, register, isLoading } = useAuth()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setIsLoading(true)
 
-    // Simulate loading
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-
-    // *TODO: DATA* - Replace with real authentication and user data
-    onLogin({
-      name: name || "User",
-      email: email,
-      avatar: "/placeholder.svg",
-    })
-    setIsLoading(false)
+    try {
+      if (isLogin) {
+        await login(email, password)
+      } else {
+        await register(email, password, name)
+      }
+      onLogin()
+    } catch (error) {
+      console.error('Authentication error:', error)
+    }
   }
 
   return (

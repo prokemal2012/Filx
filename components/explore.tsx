@@ -1,8 +1,12 @@
 "use client"
 
 import { useState } from "react"
+import useSWR from "swr"
 import { Search, TrendingUp, Filter, Eye, Heart, Download } from "lucide-react"
 import { Input } from "@/components/ui/input"
+
+// SWR fetcher function
+const fetcher = (url: string) => fetch(url).then((res) => res.json())
 
 interface ExploreProps {
   onViewDocument: (doc: any) => void
@@ -12,14 +16,15 @@ export function Explore({ onViewDocument }: ExploreProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCategory, setSelectedCategory] = useState("all")
 
-  // *TODO: DATA* - Replace with real categories data from server
-  const categories = []
-
-  // *TODO: DATA* - Replace with real trending topics from server
-  const trendingTopics = []
-
-  // *TODO: DATA* - Replace with real documents data from server
-  const documents = []
+  const { data: categories = [] } = useSWR("/api/categories", fetcher)
+  const { data: trendingTopicsData = {} } = useSWR("/api/trending-topics", fetcher)
+  const { data: documentsData, error: documentsError } = useSWR("/api/documents?explore=true", fetcher)
+  
+  // Handle trending topics data - ensure it's an array
+  const trendingTopics = Array.isArray(trendingTopicsData?.topics) ? trendingTopicsData.topics : []
+  
+  // Handle documents data - ensure it's an array
+  const documents = Array.isArray(documentsData) ? documentsData : (documentsData?.documents || [])
 
   const filteredDocuments = documents.filter((doc) => {
     const matchesSearch =
@@ -92,7 +97,7 @@ export function Explore({ onViewDocument }: ExploreProps) {
                   key={index}
                   className="block w-full text-left p-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg"
                 >
-                  #{topic.replace(" ", "").toLowerCase()}
+                  #{topic.name.replace(" ", "").toLowerCase()}
                 </button>
               ))}
             </div>

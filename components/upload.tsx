@@ -21,9 +21,19 @@ export function Upload({ user }: UploadProps) {
   const [tags, setTags] = useState<string[]>([])
   const [currentTag, setCurrentTag] = useState("")
   const [isPublic, setIsPublic] = useState(true)
+  const [isUploading, setIsUploading] = useState(false)
+  const [uploadSuccess, setUploadSuccess] = useState(false)
 
-  // *TODO: DATA* - Replace with real categories data from server
-  const categories = []
+  // Categories for documents
+  const categories = [
+    "Technology",
+    "Education", 
+    "Business",
+    "Science",
+    "Health",
+    "Arts",
+    "Other"
+  ]
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -82,27 +92,92 @@ export function Upload({ user }: UploadProps) {
     return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    // Handle upload logic here
-    console.log({ title, description, category, tags, files, isPublic })
+    if (files.length === 0) return
+    
+    setIsUploading(true)
+    
+    try {
+      for (const file of files) {
+        const formData = new FormData()
+        formData.append('file', file)
+        formData.append('userId', user.id)
+        formData.append('title', title || file.name)
+        formData.append('description', description)
+        formData.append('category', category)
+        formData.append('tags', tags.join(','))
+        formData.append('isPublic', isPublic.toString())
+        
+        // Upload to server using the upload API
+        const response = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData,
+          credentials: 'include' // Important: Include cookies for authentication
+        })
+        
+        if (!response.ok) {
+          const errorData = await response.json()
+          throw new Error(errorData.error || 'Upload failed')
+        }
+        
+        const result = await response.json()
+        console.log('Upload successful:', result)
+      }
+      
+      setUploadSuccess(true)
+      // Reset form
+      setFiles([])
+      setTitle('')
+      setDescription('')
+      setCategory('')
+      setTags([])
+      setCurrentTag('')
+      
+      // Show success message for 3 seconds
+      setTimeout(() => setUploadSuccess(false), 3000)
+      
+    } catch (error) {
+      console.error('Upload error:', error)
+      alert(`Upload failed: ${error.message}`)
+    } finally {
+      setIsUploading(false)
+    }
+  }
+  
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.readAsDataURL(file)
+      reader.onload = () => resolve(reader.result as string)
+      reader.onerror = error => reject(error)
+    })
   }
 
   return (
-    <div className="max-w-4xl mx-auto py-8 px-6">
+    <div className="max-w-4xl mx-auto py-4 sm:py-8 px-4 sm:px-6">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">Upload Document</h1>
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">Upload Document</h1>
         <p className="text-gray-600">Share your knowledge with the FileHub community</p>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-8">
+      <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-8">
         {/* File Upload Area */}
-        <div className="bg-white rounded-2xl border border-gray-200 p-8">
+        <div className="bg-white rounded-xl sm:rounded-2xl border border-gray-200 p-4 sm:p-8">
           <h2 className="text-lg font-semibold text-gray-900 mb-6">Upload Files</h2>
 
-          <div
-            className={`border-2 border-dashed rounded-2xl p-12 text-center transition-colors ${
+          <input
+            type="file"
+            multiple
+            onChange={handleFileSelect}
+            className="hidden"
+            id="file-upload"
+            accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.md,.rtf"
+          />
+          <label
+            htmlFor="file-upload"
+            className={`block border-2 border-dashed rounded-xl sm:rounded-2xl p-6 sm:p-12 text-center transition-colors cursor-pointer ${
               dragActive ? "border-blue-500 bg-blue-50" : "border-gray-300 hover:border-gray-400"
             }`}
             onDragEnter={handleDrag}
@@ -112,21 +187,11 @@ export function Upload({ user }: UploadProps) {
           >
             <UploadIcon size={48} className="mx-auto text-gray-400 mb-4" />
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Drop your files here, or click to browse</h3>
-            <p className="text-gray-500 mb-6">Supports PDF, DOCX, PPTX, TXT and more. Max file size: 50MB</p>
-            <input
-              type="file"
-              multiple
-              onChange={handleFileSelect}
-              className="hidden"
-              id="file-upload"
-              accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.md"
-            />
-            <label htmlFor="file-upload">
-              <Button type="button" className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl">
-                Choose Files
-              </Button>
-            </label>
-          </div>
+            <p className="text-gray-500 mb-6">Supports PDF, DOCX, PPTX, XLSX, TXT and more. Max file size: 50MB (files are compressed for efficient storage)</p>
+            <div className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl inline-block font-medium transition-colors">
+              Choose Files
+            </div>
+          </label>
 
           {/* File List */}
           {files.length > 0 && (
@@ -155,7 +220,7 @@ export function Upload({ user }: UploadProps) {
         </div>
 
         {/* Document Details */}
-        <div className="bg-white rounded-2xl border border-gray-200 p-8">
+        <div className="bg-white rounded-xl sm:rounded-2xl border border-gray-200 p-4 sm:p-8">
           <h2 className="text-lg font-semibold text-gray-900 mb-6">Document Details</h2>
 
           <div className="space-y-6">
@@ -243,7 +308,7 @@ export function Upload({ user }: UploadProps) {
         </div>
 
         {/* Privacy Settings */}
-        <div className="bg-white rounded-2xl border border-gray-200 p-8">
+        <div className="bg-white rounded-xl sm:rounded-2xl border border-gray-200 p-4 sm:p-8">
           <h2 className="text-lg font-semibold text-gray-900 mb-6">Privacy Settings</h2>
 
           <div className="space-y-4">
@@ -276,20 +341,39 @@ export function Upload({ user }: UploadProps) {
           </div>
         </div>
 
+        {/* Success Message */}
+        {uploadSuccess && (
+          <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <p className="text-sm font-medium text-green-800">
+                  Document uploaded successfully!
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Submit Button */}
-        <div className="flex justify-end space-x-4">
+        <div className="flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-4">
           <Button
             type="button"
-            className="border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 px-8 py-3 rounded-xl"
+            className="w-full sm:w-auto border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 px-6 sm:px-8 py-3 rounded-xl"
+            disabled={isUploading}
           >
             Save as Draft
           </Button>
           <Button
             type="submit"
-            className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-xl"
-            disabled={!title || !description || !category || files.length === 0}
+            className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-6 sm:px-8 py-3 rounded-xl"
+            disabled={!title || !description || !category || files.length === 0 || isUploading}
           >
-            Publish Document
+            {isUploading ? 'Uploading...' : 'Publish Document'}
           </Button>
         </div>
       </form>

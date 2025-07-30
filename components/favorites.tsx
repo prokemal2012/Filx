@@ -1,9 +1,14 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
+import useSWR from "swr"
 import { Heart, Bookmark, Users, Search, Eye, Download, Calendar } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
+
+// SWR fetcher function
+const fetcher = (url: string) => fetch(url, { credentials: 'include' }).then((res) => res.json())
 
 interface FavoritesProps {
   user: any
@@ -12,14 +17,30 @@ interface FavoritesProps {
 }
 
 export function Favorites({ user, type, onViewDocument }: FavoritesProps) {
+  const router = useRouter()
   const [searchQuery, setSearchQuery] = useState("")
   const [sortBy, setSortBy] = useState("recent")
 
-  // *TODO: DATA* - Replace with data fetched from server
-  const favoriteDocuments = []
-
-  // *TODO: DATA* - Replace with data fetched from server
-  const followingUsers = []
+  // Fetch bookmarks or liked documents based on type
+  const { data: bookmarksData, error: bookmarksError } = useSWR(
+    type === "bookmarks" ? '/api/interactions/bookmarks' : null,
+    fetcher
+  )
+  
+  const { data: likesData = [] } = useSWR(
+    type === "favorites" ? '/api/interactions/likes' : null,
+    fetcher
+  )
+  
+  // Fetch following users
+  const { data: connectionsData } = useSWR(
+    type === "following" ? '/api/interactions/connections' : null,
+    fetcher
+  )
+  
+  const favoriteDocuments = type === "favorites" ? (Array.isArray(likesData) ? likesData : []) : []
+  const bookmarkedDocuments = type === "bookmarks" ? (Array.isArray(bookmarksData) ? bookmarksData : []) : []
+  const followingUsers = connectionsData?.following || []
 
   const getPageConfig = () => {
     switch (type) {
@@ -61,10 +82,13 @@ export function Favorites({ user, type, onViewDocument }: FavoritesProps) {
   const config = getPageConfig()
   const Icon = config.icon
 
-  const filteredDocuments = favoriteDocuments.filter(
+  // Use the appropriate document array based on type
+  const documentsToFilter = type === "bookmarks" ? bookmarkedDocuments : favoriteDocuments
+  
+  const filteredDocuments = documentsToFilter.filter(
     (doc) =>
-      doc.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      doc.author.toLowerCase().includes(searchQuery.toLowerCase()),
+      doc.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      doc.author?.toLowerCase().includes(searchQuery.toLowerCase()),
   )
 
   const filteredUsers = followingUsers.filter(
@@ -124,7 +148,8 @@ export function Favorites({ user, type, onViewDocument }: FavoritesProps) {
             filteredUsers.map((followedUser) => (
               <div
                 key={followedUser.id}
-                className="bg-white rounded-2xl border border-gray-200 p-6 hover:shadow-sm transition-shadow"
+                className="bg-white rounded-2xl border border-gray-200 p-6 hover:shadow-sm transition-shadow cursor-pointer"
+                onClick={() => router.push(`/profile/${followedUser.id}`)}
               >
                 <div className="flex items-start space-x-4">
                   <img
@@ -142,7 +167,7 @@ export function Favorites({ user, type, onViewDocument }: FavoritesProps) {
                           </div>
                         )}
                       </div>
-                      <div className="flex items-center space-x-2">
+                      <div className="flex items-center space-x-2" onClick={(e) => e.stopPropagation()}>
                         <Button className="bg-gray-100 text-gray-700 hover:bg-gray-200 px-4 py-2 rounded-xl">
                           Following
                         </Button>
@@ -156,11 +181,11 @@ export function Favorites({ user, type, onViewDocument }: FavoritesProps) {
                     <div className="flex items-center space-x-6 text-sm text-gray-500">
                       <div className="flex items-center space-x-1">
                         <Users size={16} />
-                        <span>{followedUser.followers.toLocaleString()} followers</span>
+                        <span>{(followedUser.followers || 0).toLocaleString()} followers</span>
                       </div>
                       <div className="flex items-center space-x-1">
                         <Heart size={16} />
-                        <span>{followedUser.documents} documents</span>
+                        <span>{followedUser.documents || 0} documents</span>
                       </div>
                       <div className="flex items-center space-x-1">
                         <Calendar size={16} />

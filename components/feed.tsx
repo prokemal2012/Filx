@@ -1,7 +1,12 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
+import useSWR, { mutate } from "swr"
 import { Heart, MessageCircle, Share, Bookmark, MoreHorizontal, Eye } from "lucide-react"
+import { LikeResponse, BookmarkResponse } from "@/types/api"
+
+// SWR fetcher function
+const fetcher = (url: string) => fetch(url).then((res) => res.json())
 
 interface FeedProps {
   user: any
@@ -9,21 +14,141 @@ interface FeedProps {
 }
 
 export function Feed({ user, onViewDocument }: FeedProps) {
-  // *TODO: DATA* - Replace with real posts data fetched from server
-  const [posts, setPosts] = useState([])
-
-  const handleLike = (postId: number) => {
-    setPosts(
-      posts.map((post) =>
-        post.id === postId
-          ? { ...post, isLiked: !post.isLiked, likes: post.isLiked ? post.likes - 1 : post.likes + 1 }
-          : post,
-      ),
+  const [posts, setPosts] = useState<any[]>([])
+  const [hasMore, setHasMore] = useState(true)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [offset, setOffset] = useState(0)
+  const limit = 20
+  
+  const { data: feedData, error, isLoading } = useSWR(`/api/feed?limit=${limit}&offset=${offset}`, fetcher)
+  
+  useEffect(() => {
+    if (feedData && feedData.items) {
+      if (offset === 0) {
+        setPosts(feedData.items)
+      } else {
+        setPosts(prev => [...prev, ...feedData.items])
+      }
+      setHasMore(feedData.hasMore)
+      setIsLoadingMore(false)
+    }
+  }, [feedData, offset])
+  
+  const loadMore = useCallback(() => {
+    if (!isLoadingMore && hasMore) {
+      setIsLoadingMore(true)
+      setOffset(prev => prev + limit)
+    }
+  }, [isLoadingMore, hasMore, limit])
+  
+  useEffect(() => {
+    const handleScroll = () => {
+      if (window.innerHeight + document.documentElement.scrollTop !== document.documentElement.offsetHeight || isLoadingMore) {
+        return
+      }
+      loadMore()
+    }
+    
+    window.addEventListener('scroll', handleScroll)
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [loadMore, isLoadingMore])
+  
+  if (error) {
+    return (
+      <div className="max-w-2xl mx-auto py-8 px-6">
+        <div className="mb-8">
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Your Feed</h1>
+          <p className="text-gray-600">Discover the latest documents from people you follow</p>
+        </div>
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <p className="text-red-700">Failed to load feed. Please try again later.</p>
+        </div>
+      </div>
+    )
+  }
+  
+  if (isLoading) {
+    return (
+      <div className="max-w-2xl mx-auto py-8 px-6">
+        <div className="mb-8">
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Your Feed</h1>
+          <p className="text-gray-600">Discover the latest documents from people you follow</p>
+        </div>
+        <div className="space-y-6">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="bg-white rounded-3xl border border-gray-200 p-6">
+              <div className="animate-pulse">
+                <div className="flex items-center space-x-3 mb-4">
+                  <div className="w-12 h-12 bg-gray-200 rounded-full"></div>
+                  <div className="space-y-2">
+                    <div className="h-4 bg-gray-200 rounded w-24"></div>
+                    <div className="h-3 bg-gray-200 rounded w-32"></div>
+                  </div>
+                </div>
+                <div className="h-32 bg-gray-200 rounded-2xl mb-4"></div>
+                <div className="flex space-x-4">
+                  <div className="h-8 bg-gray-200 rounded w-16"></div>
+                  <div className="h-8 bg-gray-200 rounded w-16"></div>
+                  <div className="h-8 bg-gray-200 rounded w-16"></div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     )
   }
 
-  const handleBookmark = (postId: number) => {
-    setPosts(posts.map((post) => (post.id === postId ? { ...post, isBookmarked: !post.isBookmarked } : post)))
+  const handleLike = async (postId: string) => {
+    try {
+      // Optimistic update
+      const updatedPosts = posts.map((post: any) =>
+        post.id === postId
+          ? { ...post, isLiked: !post.isLiked, likes: post.isLiked ? post.likes - 1 : post.likes + 1 }
+          : post,
+      )
+      mutate("/api/interactions/feed", updatedPosts, false)
+
+      // API call
+      const response = await fetch("/api/interactions/like", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ documentId: postId })
+      })
+
+      if (!response.ok) {
+        // Revert on error
+        mutate("/api/interactions/feed")
+      }
+    } catch (error) {
+      // Revert on error
+      mutate("/api/interactions/feed")
+    }
+  }
+
+  const handleBookmark = async (postId: string) => {
+    try {
+      // Optimistic update
+      const updatedPosts = posts.map((post: any) =>
+        post.id === postId ? { ...post, isBookmarked: !post.isBookmarked } : post
+      )
+      mutate("/api/interactions/feed", updatedPosts, false)
+
+      // API call
+      const response = await fetch("/api/interactions/bookmark", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ documentId: postId })
+      })
+
+      if (!response.ok) {
+        // Revert on error
+        mutate("/api/interactions/feed")
+      }
+    } catch (error) {
+      // Revert on error
+      mutate("/api/interactions/feed")
+    }
   }
 
   return (
@@ -36,109 +161,68 @@ export function Feed({ user, onViewDocument }: FeedProps) {
 
       {/* Posts */}
       <div className="space-y-6">
-        {posts.map((post) => (
-          <div
-            key={post.id}
-            className="bg-white rounded-3xl border border-gray-200 overflow-hidden hover:shadow-sm transition-shadow"
-          >
-            {/* Post Header */}
-            <div className="p-6 pb-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <img
-                    src={post.author.avatar || "/placeholder.svg"}
-                    alt={post.author.name}
-                    className="w-12 h-12 rounded-full"
-                  />
-                  <div>
-                    <div className="flex items-center space-x-2">
-                      <h3 className="font-semibold text-gray-900">{post.author.name}</h3>
-                      {post.author.verified && (
-                        <div className="w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
-                          <span className="text-white text-xs">✓</span>
-                        </div>
-                      )}
-                    </div>
-                    <p className="text-sm text-gray-500">
-                      @{post.author.username} • {post.timestamp}
-                    </p>
+        {posts.length === 0 ? (
+          <div className="bg-white rounded-3xl border border-gray-200 p-8 text-center">
+            <p className="text-gray-500 mb-2">No posts in your feed yet.</p>
+            <p className="text-sm text-gray-400">Follow some users to see their latest documents here!</p>
+          </div>
+        ) : (
+          posts.map((post) => {
+            if (post.type === 'activity' && post.data && post.data.user) {
+              // Render activity
+              let activityText = `${post.data.user.name} did something`;
+              if (post.data.action === 'document_created' && post.data.document) {
+                activityText = `${post.data.user.name} uploaded a new document: ${post.data.document.title}`;
+              } else if (post.data.action === 'user.followed' && post.data.targetUser) {
+                activityText = `${post.data.user.name} started following ${post.data.targetUser.name}`;
+              } else if (post.data.action === 'user.gained_follower' && post.data.details && post.data.details.followerName) {
+                activityText = `${post.data.details.followerName} started following ${post.data.user.name}`;
+              }
+
+              return (
+                <div key={post.id} className="bg-white rounded-3xl border border-gray-200 overflow-hidden hover:shadow-sm transition-shadow">
+                  <div className="p-6">
+                    <p className="text-gray-800">{activityText}</p>
+                    <p className="text-xs text-gray-400">{new Date(post.timestamp).toLocaleString()}</p>
                   </div>
                 </div>
-                <button className="p-2 hover:bg-gray-50 rounded-full">
-                  <MoreHorizontal size={20} className="text-gray-400" />
-                </button>
-              </div>
-            </div>
-
-            {/* Document Preview */}
-            <div className="px-6 pb-4">
-              <div
-                className="bg-gray-50 rounded-2xl p-6 cursor-pointer hover:bg-gray-100 transition-colors"
-                onClick={() => onViewDocument(post.document)}
-              >
-                <div className="flex space-x-4">
-                  <img
-                    src={post.document.thumbnail || "/placeholder.svg"}
-                    alt={post.document.title}
-                    className="w-24 h-32 object-cover rounded-xl border border-gray-200"
-                  />
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-2 mb-2">
-                      <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded-lg">
-                        {post.document.category}
-                      </span>
-                      <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs font-medium rounded-lg">
-                        {post.document.type}
-                      </span>
-                    </div>
-                    <h4 className="font-bold text-gray-900 text-lg mb-2">{post.document.title}</h4>
-                    <p className="text-gray-600 text-sm mb-3 line-clamp-2">{post.document.description}</p>
-                    <div className="flex items-center space-x-4 text-sm text-gray-500">
-                      <span>{post.document.pages} pages</span>
-                      <div className="flex items-center space-x-1">
-                        <Eye size={14} />
-                        <span>Click to view</span>
+              );
+            } else if (post.type === 'recent_document' && post.data) {
+              // Render document
+              return (
+                <div key={post.id} className="bg-white rounded-3xl border border-gray-200 overflow-hidden hover:shadow-sm transition-shadow">
+                  <div className="p-6">
+                    <div className="flex items-center space-x-3 mb-4">
+                      <img src={post.data.author.avatarUrl || '/placeholder.svg'} alt={post.data.author.name} className="w-12 h-12 rounded-full" />
+                      <div>
+                        <h3 className="font-semibold text-gray-900">{post.data.author.name}</h3>
+                        <p className="text-sm text-gray-500">Posted on {new Date(post.timestamp).toLocaleDateString()}</p>
                       </div>
                     </div>
+                    <h3 className="font-bold text-gray-900 text-lg mb-2">{post.data.title}</h3>
+                    <p className="text-gray-600 text-sm mb-3 line-clamp-2">{post.data.description}</p>
+                    <button onClick={() => onViewDocument(post.data)} className="text-blue-600 hover:underline">View Document</button>
                   </div>
                 </div>
-              </div>
-            </div>
-
-            {/* Post Actions */}
-            <div className="px-6 py-4 border-t border-gray-100">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-6">
-                  <button
-                    onClick={() => handleLike(post.id)}
-                    className={`flex items-center space-x-2 px-3 py-2 rounded-full transition-colors ${
-                      post.isLiked ? "text-red-500 bg-red-50" : "text-gray-600 hover:bg-gray-50"
-                    }`}
-                  >
-                    <Heart size={18} fill={post.isLiked ? "currentColor" : "none"} />
-                    <span className="text-sm font-medium">{post.likes}</span>
-                  </button>
-                  <button className="flex items-center space-x-2 px-3 py-2 rounded-full text-gray-600 hover:bg-gray-50 transition-colors">
-                    <MessageCircle size={18} />
-                    <span className="text-sm font-medium">{post.comments}</span>
-                  </button>
-                  <button className="flex items-center space-x-2 px-3 py-2 rounded-full text-gray-600 hover:bg-gray-50 transition-colors">
-                    <Share size={18} />
-                    <span className="text-sm font-medium">{post.shares}</span>
-                  </button>
-                </div>
-                <button
-                  onClick={() => handleBookmark(post.id)}
-                  className={`p-2 rounded-full transition-colors ${
-                    post.isBookmarked ? "text-blue-500 bg-blue-50" : "text-gray-600 hover:bg-gray-50"
-                  }`}
-                >
-                  <Bookmark size={18} fill={post.isBookmarked ? "currentColor" : "none"} />
-                </button>
-              </div>
-            </div>
+              );
+            }
+            return null;
+          })
+        )}
+        
+        {/* Loading indicator for infinite scroll */}
+        {isLoadingMore && (
+          <div className="flex justify-center py-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
           </div>
-        ))}
+        )}
+        
+        {/* End of feed message */}
+        {!hasMore && posts.length > 0 && (
+          <div className="text-center py-8">
+            <p className="text-gray-500">You've reached the end of your feed!</p>
+          </div>
+        )}
       </div>
     </div>
   )

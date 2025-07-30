@@ -1,8 +1,12 @@
 "use client"
 
-import { useState } from "react"
-import { TrendingUp, Users, FileText, Heart, Upload, Eye, Download, ArrowUpRight, Clock, Activity } from "lucide-react"
+import useSWR from "swr"
+import { TrendingUp, Users, FileText, Heart, Upload, Eye, Download, ArrowUpRight, Clock, Activity, Bookmark, User } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { UserAvatar } from "@/components/ui/user-avatar"
+
+// SWR fetcher function
+const fetcher = (url: string) => fetch(url).then((res) => res.json())
 
 interface DashboardProps {
   user: any
@@ -11,16 +15,8 @@ interface DashboardProps {
 }
 
 export function Dashboard({ user, onViewDocument, onPageChange }: DashboardProps) {
-  const [timeRange, setTimeRange] = useState("week")
-
-  // *TODO: DATA* - Replace with data fetched from the server
-  const stats = []
-
-  // *TODO: DATA* - Replace with real recent activity data
-  const recentActivity = []
-
-  // *TODO: DATA* - Replace with real trending documents data
-  const trendingDocuments = []
+const { data: recentActivity = [], error: activityError } = useSWR("/api/recent-activity", fetcher)
+const { data: trendingDocuments = [], error: trendingError } = useSWR("/api/trending-documents", fetcher)
 
   const quickActions = [
     {
@@ -52,8 +48,12 @@ export function Dashboard({ user, onViewDocument, onPageChange }: DashboardProps
         return <Heart size={16} className="text-red-500" />
       case "follow":
         return <Users size={16} className="text-blue-500" />
-      case "comment":
-        return <Activity size={16} className="text-green-500" />
+      case "bookmark":
+        return <Bookmark size={16} className="text-yellow-500" />
+      case "upload":
+        return <Upload size={16} className="text-green-500" />
+      case "profile":
+        return <User size={16} className="text-purple-500" />
       case "download":
         return <Download size={16} className="text-purple-500" />
       default:
@@ -62,60 +62,21 @@ export function Dashboard({ user, onViewDocument, onPageChange }: DashboardProps
   }
 
   return (
-    <div className="max-w-7xl mx-auto py-8 px-6">
+    <div className="max-w-7xl mx-auto py-4 sm:py-8 px-4 sm:px-6">
       {/* Header */}
       <div className="mb-8">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Good morning, {user.name.split(" ")[0]}! 👋</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">Good morning, {user.name.split(" ")[0]}! 👋</h1>
             <p className="text-gray-600">Here's what's happening with your documents today.</p>
-          </div>
-          <div className="flex items-center space-x-3">
-            <select
-              value={timeRange}
-              onChange={(e) => setTimeRange(e.target.value)}
-              className="border border-gray-300 rounded-xl px-4 py-2 bg-white text-sm"
-            >
-              <option value="week">This Week</option>
-              <option value="month">This Month</option>
-              <option value="year">This Year</option>
-            </select>
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-12 gap-6">
-        {/* Stats Cards */}
-        <div className="col-span-12 mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {stats.map((stat, index) => {
-              const Icon = stat.icon
-              return (
-                <div
-                  key={index}
-                  className="bg-white rounded-2xl border border-gray-200 p-6 hover:shadow-sm transition-shadow"
-                >
-                  <div className="flex items-center justify-between mb-4">
-                    <div className={`w-12 h-12 bg-${stat.color}-100 rounded-2xl flex items-center justify-center`}>
-                      <Icon size={24} className={`text-${stat.color}-600`} />
-                    </div>
-                    <div className="flex items-center space-x-1 text-green-600 text-sm font-medium">
-                      <ArrowUpRight size={16} />
-                      <span>{stat.change}</span>
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold text-gray-900 mb-1">{stat.value}</p>
-                    <p className="text-sm text-gray-600">{stat.label}</p>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6">
 
         {/* Quick Actions */}
-        <div className="col-span-12 lg:col-span-4">
+        <div className="col-span-1 lg:col-span-4">
           <div className="bg-white rounded-2xl border border-gray-200 p-6 mb-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
             <div className="space-y-3">
@@ -187,7 +148,7 @@ export function Dashboard({ user, onViewDocument, onPageChange }: DashboardProps
         </div>
 
         {/* Recent Activity */}
-        <div className="col-span-12 lg:col-span-8">
+        <div className="col-span-1 lg:col-span-8">
           <div className="bg-white rounded-2xl border border-gray-200 p-6">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-lg font-semibold text-gray-900">Recent Activity</h2>
@@ -205,10 +166,10 @@ export function Dashboard({ user, onViewDocument, onPageChange }: DashboardProps
                   key={index}
                   className="flex items-start space-x-4 p-4 rounded-xl hover:bg-gray-50 transition-colors"
                 >
-                  <img
-                    src={activity.avatar || "/placeholder.svg"}
-                    alt="Avatar"
-                    className="w-10 h-10 rounded-full flex-shrink-0"
+                  <UserAvatar 
+                    user={{ name: activity.user || 'Unknown User', avatarUrl: activity.avatar }}
+                    size="small"
+                    className="flex-shrink-0"
                   />
                   <div className="flex-1">
                     <div className="flex items-center space-x-2 mb-1">
@@ -220,21 +181,13 @@ export function Dashboard({ user, onViewDocument, onPageChange }: DashboardProps
                     )}
                     <div className="flex items-center space-x-1 text-xs text-gray-500">
                       <Clock size={12} />
-                      <span>{activity.time}</span>
+                      <span>{new Date(activity.timestamp).toLocaleString()}</span>
                     </div>
                   </div>
                 </div>
               ))}
             </div>
 
-            <div className="mt-6 pt-4 border-t border-gray-100 text-center">
-              <Button
-                onClick={() => onPageChange("feed")}
-                className="text-gray-600 hover:text-gray-900 text-sm font-medium bg-transparent hover:bg-gray-50 px-4 py-2 rounded-lg"
-              >
-                View All Activity
-              </Button>
-            </div>
           </div>
         </div>
       </div>

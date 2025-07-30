@@ -25,3 +25,18 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# uploads
+/uploads
+
+# data files (no longer needed)
+/data
+
+# migration scripts
+migrate.js
+migrate-v2.js
+schema.sql
+
+# misc
+.DS_Store
+*.pem

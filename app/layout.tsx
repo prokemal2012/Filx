@@ -1,6 +1,9 @@
 import type { Metadata } from 'next'
 import { GeistSans } from 'geist/font/sans'
 import { GeistMono } from 'geist/font/mono'
+import { AuthProvider } from '@/context/AuthContext'
+import { DocumentViewerProvider } from '@/context/DocumentViewerContext'
+import { Toaster } from '@/components/ui/sonner'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -25,7 +28,14 @@ html {
 }
         `}</style>
       </head>
-      <body>{children}</body>
+      <body>
+        <AuthProvider>
+          <DocumentViewerProvider>
+            {children}
+            <Toaster />
+          </DocumentViewerProvider>
+        </AuthProvider>
+      </body>
     </html>
   )
 }
